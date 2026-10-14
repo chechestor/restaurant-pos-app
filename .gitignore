@@ -1,0 +1,16 @@
+# Agent scratch space: notes, drafts, logs. Not part of the app.
+.mobiledev/
+.mobileanalyst/
+
+# Android / Gradle
+.gradle/
+**/build/
+local.properties
+.idea/
+*.iml
+.cxx/
+captures/
+*.apk
+*.aab
+*.ap_
+*.dex
