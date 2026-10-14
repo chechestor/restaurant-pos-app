@@ -1,6 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="button_normal">#F9A825</color>
-    <color name="button_alt">#1565C0</color>
+    <color name="primary">#1565C0</color>
+    <color name="text">#1A1A1A</color>
+    <color name="muted">#5C6570</color>
+    <color name="error">#C62828</color>
     <color name="button_text">#FFFFFF</color>
+    <color name="card">#FFFFFF</color>
+    <color name="field">#FFFFFF</color>
+    <color name="warning">#FFF4E5</color>
 </resources>

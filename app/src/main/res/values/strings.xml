@@ -1,5 +1,33 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">SMG POS</string>
-    <string name="color_button">Нажми</string>
+    <string name="login_title">Вход</string>
+    <string name="login_hint">Тот же email и пароль, что в кабинете POS.</string>
+    <string name="email">Email</string>
+    <string name="password">Пароль</string>
+    <string name="sign_in">Войти</string>
+    <string name="enter_credentials">Введите email и пароль</string>
+    <string name="bad_credentials">Неверный email или пароль</string>
+    <string name="network_error">Нет связи с сервером</string>
+    <string name="session_expired">Сессия истекла. Войдите снова.</string>
+    <string name="calls_title">Вызовы</string>
+    <string name="settings">Настройки</string>
+    <string name="logout">Выйти</string>
+    <string name="back">Назад</string>
+    <string name="loading">Загрузка…</string>
+    <string name="empty_calls">Вызовов нет</string>
+    <string name="offline">Нет связи</string>
+    <string name="offline_stale">Нет связи. Показан последний список.</string>
+    <string name="notifications_off">Уведомления выключены. Сигнал о новом вызове работать не будет.</string>
+    <string name="sound">Звук</string>
+    <string name="vibration">Вибрация</string>
+    <string name="volume_hint">Громкость берётся из системных уведомлений.</string>
+    <string name="denied">Нет права просматривать вызовы официанта.</string>
+    <string name="shift_running">Смена идёт</string>
+    <string name="shift_running_detail">Приложение следит за вызовами</string>
+    <string name="shift_channel">Смена</string>
+    <string name="field_table">Стол: %1$s</string>
+    <string name="field_reason">Причина: %1$s</string>
+    <string name="field_status">Статус: %1$s</string>
+    <string name="field_created">Создан: %1$s</string>
 </resources>
