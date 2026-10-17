@@ -8,7 +8,6 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.TextView
-import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
@@ -19,12 +18,11 @@ import androidx.recyclerview.widget.RecyclerView
 import kotlin.concurrent.thread
 
 class MainActivity : AppCompatActivity(), ShiftState.Listener {
-    private enum class Screen { LOGIN, SHIFT_OFF, CALLS, SETTINGS, DENIED }
+    private enum class Screen { LOGIN, SHIFT_OFF, CALLS, DENIED }
 
     private lateinit var loginScreen: View
     private lateinit var shiftOffScreen: View
     private lateinit var callsScreen: View
-    private lateinit var settingsScreen: View
     private lateinit var deniedScreen: View
     private lateinit var emailInput: android.widget.EditText
     private lateinit var passwordInput: android.widget.EditText
@@ -63,16 +61,6 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
             ShiftState.showShiftOff()
             ShiftService.stop(this)
         }
-        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
-            override fun handleOnBackPressed() {
-                if (screen == Screen.SETTINGS) {
-                    screen = Screen.CALLS
-                    render()
-                } else {
-                    finish()
-                }
-            }
-        })
         render()
     }
 
@@ -111,7 +99,6 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
         loginScreen = findViewById(R.id.screen_login)
         shiftOffScreen = findViewById(R.id.screen_shift_off)
         callsScreen = findViewById(R.id.screen_calls)
-        settingsScreen = findViewById(R.id.screen_settings)
         deniedScreen = findViewById(R.id.screen_denied)
         emailInput = findViewById(R.id.email)
         passwordInput = findViewById(R.id.password)
@@ -138,18 +125,10 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
                 false
             }
         }
-        findViewById<View>(R.id.settings_button).setOnClickListener {
-            screen = Screen.SETTINGS
-            render()
-        }
         findViewById<View>(R.id.end_shift_button).setOnClickListener { confirmEndShift() }
         findViewById<View>(R.id.denied_end_shift).setOnClickListener { confirmEndShift() }
         startShiftSwitch.setOnCheckedChangeListener { _, checked ->
             if (!ignoreSwitch && checked) startShift()
-        }
-        findViewById<View>(R.id.settings_back).setOnClickListener {
-            screen = Screen.CALLS
-            render()
         }
         soundSwitch.setOnCheckedChangeListener { _, checked ->
             if (!ignoreSwitch) SessionStore.setSoundEnabled(checked)
@@ -281,7 +260,6 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
         loginScreen.isVisible = screen == Screen.LOGIN
         shiftOffScreen.isVisible = screen == Screen.SHIFT_OFF
         callsScreen.isVisible = screen == Screen.CALLS
-        settingsScreen.isVisible = screen == Screen.SETTINGS
         deniedScreen.isVisible = screen == Screen.DENIED
 
         val message = loginErrorText ?: if (phase == ShiftState.Phase.LOGIN) ShiftState.loginMessage else null

@@ -16,6 +16,9 @@ import androidx.core.app.NotificationCompat
 class ShiftService : Service() {
     private var pollThread: Thread? = null
     private var running = false
+    private var pollGeneration = 0
+    private var serviceStartId = 0
+    private val pollLock = Any()
     private var wakeLock: PowerManager.WakeLock? = null
     private val wakeLockGuard = Any()
     private var lastCalls: List<WaiterCall> = emptyList()
@@ -26,42 +29,63 @@ class ShiftService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        runningService = this
-        createChannel()
-        startInForeground()
-        acquireWakeLock()
-        if (!SessionStore.hasUsableSession() || !SessionStore.isShiftOn()) {
-            stopShift()
+        val started = synchronized(pollLock) {
+            serviceStartId = startId
+            runningService = this
+            createChannel()
+            startInForeground()
+            val previous = pollThread
+            if (!SessionStore.hasUsableSession() || !SessionStore.isShiftOn()) {
+                pollGeneration += 1
+                running = false
+                pollThread = null
+                previous?.interrupt()
+                null
+            } else {
+                pollGeneration += 1
+                running = true
+                val generation = pollGeneration
+                val thread = Thread({ pollLoop(generation, startId) }, "shift-poll")
+                pollThread = thread
+                previous?.interrupt()
+                thread
+            }
+        }
+        if (started == null) {
+            releaseWakeLock()
+            removeForeground()
+            stopSelf(startId)
             return START_NOT_STICKY
         }
+        started.start()
+        acquireWakeLock()
         noteEpoch()
-        ensurePollThread()
         return START_STICKY
     }
 
     override fun onDestroy() {
-        running = false
+        val thread = synchronized(pollLock) {
+            pollGeneration += 1
+            running = false
+            val current = pollThread
+            pollThread = null
+            current
+        }
         if (runningService === this) runningService = null
-        pollThread?.interrupt()
+        thread?.interrupt()
         SignalPlayer.stop()
         releaseWakeLock()
         super.onDestroy()
     }
 
-    private fun ensurePollThread() {
-        if (pollThread?.isAlive == true) return
-        running = true
-        pollThread = Thread({ pollLoop() }, "shift-poll").also { it.start() }
-    }
-
-    private fun pollLoop() {
-        while (running) {
+    private fun pollLoop(generation: Int, startId: Int) {
+        while (running && generation == pollGeneration) {
             val epoch = SessionStore.epoch
             try {
-                if (!running) return
+                if (!running || generation != pollGeneration) return
                 noteEpoch()
                 if (!SessionStore.isShiftOn()) {
-                    stopShift()
+                    if (generation == pollGeneration) stopShift(startId)
                     return
                 }
                 if (!SessionStore.hasUsableSession()) {
@@ -69,20 +93,22 @@ class ShiftService : Service() {
                         SessionStore.clearSession()
                         ShiftState.showLogin(getString(R.string.session_expired))
                     }
-                    stopShift()
+                    stopShift(startId)
                     return
                 }
                 if (!ShiftState.manageKnown) {
                     when (val me = PosClient.fetchManagePermission()) {
                         is PosClient.ManageResult.Known -> {
-                            if (running && epoch == SessionStore.epoch) ShiftState.publishCanManage(me.allowed)
+                            if (running && generation == pollGeneration && epoch == SessionStore.epoch) {
+                                ShiftState.publishCanManage(me.allowed)
+                            }
                         }
                         PosClient.ManageResult.SessionExpired -> {
-                            if (!running || epoch != SessionStore.epoch) return
+                            if (!running || generation != pollGeneration || epoch != SessionStore.epoch) return
                             SignalPlayer.stop()
                             SessionStore.clearSession()
                             ShiftState.showLogin(getString(R.string.session_expired))
-                            stopShift()
+                            stopShift(startId)
                             return
                         }
                         PosClient.ManageResult.Network -> Unit
@@ -92,7 +118,7 @@ class ShiftService : Service() {
                 val fetchedAt = System.currentTimeMillis()
                 when (val result = PosClient.fetchCalls()) {
                     is PosClient.CallsResult.Ok -> {
-                        if (!running || epoch != SessionStore.epoch || !SessionStore.isShiftOn()) continue
+                        if (!running || generation != pollGeneration || epoch != SessionStore.epoch || !SessionStore.isShiftOn()) continue
                         val fresh = if (!SessionStore.isBaselineDone()) {
                             SessionStore.markBaseline(result.calls.map { it.id })
                             emptyList()
@@ -100,29 +126,29 @@ class ShiftService : Service() {
                             SessionStore.consumeNew(result.calls)
                         }
                         synchronized(callsLock) {
-                            if (!running || epoch != SessionStore.epoch || !SessionStore.isShiftOn()) return@synchronized
+                            if (!running || generation != pollGeneration || epoch != SessionStore.epoch || !SessionStore.isShiftOn()) return@synchronized
                             lastCalls = applyOverrides(result.calls, fetchedAt)
                             ShiftState.showList(lastCalls, isOffline = false)
                             if (fresh.isNotEmpty()) SignalPlayer.enqueue(this, fresh.size)
                         }
                     }
                     PosClient.CallsResult.Forbidden -> {
-                        if (!running || epoch != SessionStore.epoch) continue
+                        if (!running || generation != pollGeneration || epoch != SessionStore.epoch) continue
                         SignalPlayer.stop()
                         ShiftState.showDenied()
-                        stopShift()
+                        stopShift(startId)
                         return
                     }
                     PosClient.CallsResult.SessionExpired -> {
-                        if (!running || epoch != SessionStore.epoch) continue
+                        if (!running || generation != pollGeneration || epoch != SessionStore.epoch) continue
                         SignalPlayer.stop()
                         SessionStore.clearSession()
                         ShiftState.showLogin(getString(R.string.session_expired))
-                        stopShift()
+                        stopShift(startId)
                         return
                     }
                     PosClient.CallsResult.Network -> {
-                        if (!running || epoch != SessionStore.epoch) continue
+                        if (!running || generation != pollGeneration || epoch != SessionStore.epoch) continue
                         synchronized(callsLock) {
                             ShiftState.showList(lastCalls, isOffline = true)
                         }
@@ -131,12 +157,12 @@ class ShiftService : Service() {
             } catch (_: InterruptedException) {
                 return
             } catch (_: Exception) {
-                if (running && epoch == SessionStore.epoch) {
+                if (running && generation == pollGeneration && epoch == SessionStore.epoch) {
                     ShiftState.showList(lastCalls, isOffline = true)
                 }
             }
             var waited = 0
-            while (running && waited < POLL_MS) {
+            while (running && generation == pollGeneration && waited < POLL_MS) {
                 try {
                     Thread.sleep(200)
                 } catch (_: InterruptedException) {
@@ -251,17 +277,28 @@ class ShiftService : Service() {
         }
     }
 
-    private fun stopShift() {
-        running = false
-        pollThread?.interrupt()
-        releaseWakeLock()
+    private fun removeForeground() {
         if (Build.VERSION.SDK_INT >= 24) {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } else {
             @Suppress("DEPRECATION")
             stopForeground(true)
         }
-        stopSelf()
+    }
+
+    private fun stopShift(startId: Int) {
+        val thread = synchronized(pollLock) {
+            if (startId != serviceStartId) return
+            pollGeneration += 1
+            running = false
+            val current = pollThread
+            pollThread = null
+            releaseWakeLock()
+            removeForeground()
+            current
+        }
+        thread?.interrupt()
+        stopSelf(startId)
     }
 
     private data class SavedStatus(val status: String, val at: Long)
