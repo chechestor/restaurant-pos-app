@@ -13,6 +13,10 @@
     <string name="calls_title">Вызовы</string>
     <string name="settings">Настройки</string>
     <string name="logout">Выйти</string>
+    <string name="start_shift">Начать смену</string>
+    <string name="end_shift_confirm">Действительно ли вы хотите закончить смену?</string>
+    <string name="end_shift">Закончить смену</string>
+    <string name="cancel">Отмена</string>
     <string name="back">Назад</string>
     <string name="loading">Загрузка…</string>
     <string name="empty_calls">Вызовов нет</string>
@@ -30,4 +34,7 @@
     <string name="field_reason">Причина: %1$s</string>
     <string name="field_status">Статус: %1$s</string>
     <string name="field_created">Создан: %1$s</string>
+    <string name="change_status">Сменить статус</string>
+    <string name="status_saving">Сохранение…</string>
+    <string name="status_failed">Не удалось сменить статус</string>
 </resources>

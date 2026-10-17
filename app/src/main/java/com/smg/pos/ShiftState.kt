@@ -3,7 +3,7 @@ package com.smg.pos
 import java.util.concurrent.CopyOnWriteArrayList
 
 object ShiftState {
-    enum class Phase { LOADING, LIST, DENIED, LOGIN }
+    enum class Phase { LOADING, LIST, DENIED, LOGIN, IDLE }
 
     interface Listener {
         fun onShiftChanged()
@@ -23,6 +23,18 @@ object ShiftState {
     @Volatile
     var loginMessage: String? = null
 
+    @Volatile
+    var canManage: Boolean = false
+
+    @Volatile
+    var manageKnown: Boolean = false
+
+    @Volatile
+    var pendingStatus: Map<Int, String> = emptyMap()
+
+    @Volatile
+    var statusErrors: Map<Int, String> = emptyMap()
+
     fun addListener(listener: Listener) {
         listeners.add(listener)
     }
@@ -35,18 +47,30 @@ object ShiftState {
         phase = Phase.LOADING
         offline = false
         calls = emptyList()
+        resetStatusAccess()
     }
 
     fun showList(items: List<WaiterCall>, isOffline: Boolean) = publish {
         phase = Phase.LIST
         calls = items
         offline = isOffline
+        val present = items.mapTo(HashSet()) { it.id }
+        pendingStatus = pendingStatus.filterKeys { it in present }
+        statusErrors = statusErrors.filterKeys { it in present }
     }
 
     fun showDenied() = publish {
         phase = Phase.DENIED
         calls = emptyList()
         offline = false
+        resetStatusAccess()
+    }
+
+    fun showShiftOff() = publish {
+        phase = Phase.IDLE
+        calls = emptyList()
+        offline = false
+        resetStatusAccess()
     }
 
     fun showLogin(message: String?) = publish {
@@ -54,6 +78,29 @@ object ShiftState {
         calls = emptyList()
         offline = false
         loginMessage = message
+        resetStatusAccess()
+    }
+
+    fun publishCanManage(allowed: Boolean) = publish {
+        canManage = allowed
+        manageKnown = true
+    }
+
+    fun beginStatusChange(id: Int, status: String) = publish {
+        pendingStatus = pendingStatus + (id to status)
+        statusErrors = statusErrors - id
+    }
+
+    fun finishStatusChange(id: Int, error: String?) = publish {
+        pendingStatus = pendingStatus - id
+        statusErrors = if (error == null) statusErrors - id else statusErrors + (id to error)
+    }
+
+    private fun resetStatusAccess() {
+        canManage = false
+        manageKnown = false
+        pendingStatus = emptyMap()
+        statusErrors = emptyMap()
     }
 
     private fun publish(block: () -> Unit) {

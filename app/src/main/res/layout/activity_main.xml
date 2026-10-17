@@ -86,6 +86,26 @@
     </ScrollView>
 
     <LinearLayout
+        android:id="@+id/screen_shift_off"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:visibility="gone">
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/start_shift_switch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:minHeight="64dp"
+            android:padding="12dp"
+            android:text="@string/start_shift"
+            android:textColor="@color/text"
+            android:textSize="22sp" />
+    </LinearLayout>
+
+    <LinearLayout
         android:id="@+id/screen_calls"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -115,12 +135,14 @@
                 android:text="@string/settings"
                 android:textAllCaps="false" />
 
-            <Button
-                android:id="@+id/logout_button"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/logout"
-                android:textAllCaps="false" />
+            <ImageButton
+                android:id="@+id/end_shift_button"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/end_shift"
+                android:scaleType="centerInside"
+                android:src="@drawable/ic_end_shift" />
         </LinearLayout>
 
         <TextView
@@ -220,21 +242,23 @@
         android:padding="24dp"
         android:visibility="gone">
 
+        <ImageButton
+            android:id="@+id/denied_end_shift"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="end"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="@string/end_shift"
+            android:scaleType="centerInside"
+            android:src="@drawable/ic_end_shift" />
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="72dp"
+            android:layout_marginTop="24dp"
             android:text="@string/denied"
             android:textColor="@color/text"
             android:textSize="20sp" />
-
-        <Button
-            android:id="@+id/denied_logout"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="@string/logout"
-            android:textAllCaps="false" />
     </LinearLayout>
 
 </FrameLayout>

@@ -12,6 +12,7 @@ object SessionStore {
     private const val KEY_BASELINE = "baseline_done"
     private const val KEY_SOUND = "sound_enabled"
     private const val KEY_VIBRATION = "vibration_enabled"
+    private const val KEY_SHIFT = "shift_on"
 
     @Volatile
     var epoch: Long = 0L
@@ -51,8 +52,27 @@ object SessionStore {
         prefs.edit()
             .putString(KEY_ACCESS, access)
             .putString(KEY_REFRESH, refresh)
+            .putBoolean(KEY_SHIFT, false)
             .remove(KEY_SEEN)
             .remove(KEY_BASELINE)
+            .commit()
+    }
+
+    fun isShiftOn(): Boolean = prefs.getBoolean(KEY_SHIFT, false)
+
+    fun startShift() {
+        epoch += 1
+        prefs.edit()
+            .putBoolean(KEY_SHIFT, true)
+            .remove(KEY_SEEN)
+            .remove(KEY_BASELINE)
+            .commit()
+    }
+
+    fun endShift() {
+        epoch += 1
+        prefs.edit()
+            .putBoolean(KEY_SHIFT, false)
             .commit()
     }
 
@@ -104,6 +124,7 @@ object SessionStore {
             .remove(KEY_REFRESH)
             .remove(KEY_SEEN)
             .remove(KEY_BASELINE)
+            .putBoolean(KEY_SHIFT, false)
             .commit()
     }
 

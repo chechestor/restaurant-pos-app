@@ -9,6 +9,7 @@ import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.TextView
 import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.app.NotificationManagerCompat
@@ -18,9 +19,10 @@ import androidx.recyclerview.widget.RecyclerView
 import kotlin.concurrent.thread
 
 class MainActivity : AppCompatActivity(), ShiftState.Listener {
-    private enum class Screen { LOGIN, CALLS, SETTINGS, DENIED }
+    private enum class Screen { LOGIN, SHIFT_OFF, CALLS, SETTINGS, DENIED }
 
     private lateinit var loginScreen: View
+    private lateinit var shiftOffScreen: View
     private lateinit var callsScreen: View
     private lateinit var settingsScreen: View
     private lateinit var deniedScreen: View
@@ -34,12 +36,14 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
     private lateinit var callsNotifications: TextView
     private lateinit var soundSwitch: SwitchCompat
     private lateinit var vibrationSwitch: SwitchCompat
+    private lateinit var startShiftSwitch: SwitchCompat
     private val callsAdapter = CallsAdapter()
 
     private var screen = Screen.LOGIN
     private var loginInFlight = false
     private var ignoreSwitch = false
     private var loginErrorText: String? = null
+    private var endConfirm: AlertDialog? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -51,9 +55,13 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
         if (!SessionStore.hasUsableSession()) {
             SessionStore.clearSession()
             screen = Screen.LOGIN
-        } else {
-            if (screen == Screen.LOGIN || screen == Screen.DENIED) screen = Screen.CALLS
+        } else if (SessionStore.isShiftOn()) {
+            if (screen == Screen.LOGIN || screen == Screen.SHIFT_OFF) screen = Screen.CALLS
             ShiftService.start(this)
+        } else {
+            screen = Screen.SHIFT_OFF
+            ShiftState.showShiftOff()
+            ShiftService.stop(this)
         }
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
@@ -101,6 +109,7 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
 
     private fun bindViews() {
         loginScreen = findViewById(R.id.screen_login)
+        shiftOffScreen = findViewById(R.id.screen_shift_off)
         callsScreen = findViewById(R.id.screen_calls)
         settingsScreen = findViewById(R.id.screen_settings)
         deniedScreen = findViewById(R.id.screen_denied)
@@ -114,9 +123,11 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
         callsNotifications = findViewById(R.id.calls_notifications)
         soundSwitch = findViewById(R.id.sound_switch)
         vibrationSwitch = findViewById(R.id.vibration_switch)
+        startShiftSwitch = findViewById(R.id.start_shift_switch)
 
         callsList.layoutManager = LinearLayoutManager(this)
         callsList.adapter = callsAdapter
+        callsAdapter.onStatusSelected = { callId, status -> changeStatus(callId, status) }
 
         loginButton.setOnClickListener { attemptLogin() }
         passwordInput.setOnEditorActionListener { _, actionId, _ ->
@@ -131,8 +142,11 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
             screen = Screen.SETTINGS
             render()
         }
-        findViewById<View>(R.id.logout_button).setOnClickListener { logout() }
-        findViewById<View>(R.id.denied_logout).setOnClickListener { logout() }
+        findViewById<View>(R.id.end_shift_button).setOnClickListener { confirmEndShift() }
+        findViewById<View>(R.id.denied_end_shift).setOnClickListener { confirmEndShift() }
+        startShiftSwitch.setOnCheckedChangeListener { _, checked ->
+            if (!ignoreSwitch && checked) startShift()
+        }
         findViewById<View>(R.id.settings_back).setOnClickListener {
             screen = Screen.CALLS
             render()
@@ -168,11 +182,10 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
                         SessionStore.beginSession(result.access, result.refresh)
                         loginErrorText = null
                         passwordInput.text.clear()
-                        screen = Screen.CALLS
-                        ShiftState.showLoading()
+                        screen = Screen.SHIFT_OFF
                         SignalPlayer.stop()
-                        ShiftService.start(this@MainActivity)
-                        askNotifications()
+                        ShiftService.stop(this@MainActivity)
+                        ShiftState.showShiftOff()
                         render()
                     }
                     PosClient.LoginResult.BadCredentials -> {
@@ -188,13 +201,61 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
         }
     }
 
-    private fun logout() {
-        SignalPlayer.stop()
-        SessionStore.clearSession()
-        ShiftState.showLogin(null)
+    private fun changeStatus(callId: Int, status: String) {
+        if (ShiftState.pendingStatus.containsKey(callId)) return
+        val current = ShiftState.calls.firstOrNull { it.id == callId }?.status
+        if (current == null || current == status) return
+        val epoch = SessionStore.epoch
+        val failText = getString(R.string.status_failed)
+        val expiredText = getString(R.string.session_expired)
+        ShiftState.beginStatusChange(callId, status)
+        thread(name = "status-$callId") {
+            val result = PosClient.updateStatus(callId, status)
+            if (epoch != SessionStore.epoch) return@thread
+            when (result) {
+                is PosClient.StatusResult.Ok -> {
+                    ShiftService.applySavedStatus(callId, result.status, epoch)
+                    if (epoch == SessionStore.epoch) ShiftState.finishStatusChange(callId, null)
+                }
+                PosClient.StatusResult.SessionExpired -> {
+                    SignalPlayer.stop()
+                    SessionStore.clearSession()
+                    ShiftState.showLogin(expiredText)
+                    ShiftService.stop(applicationContext)
+                }
+                PosClient.StatusResult.Failed -> {
+                    if (epoch == SessionStore.epoch) ShiftState.finishStatusChange(callId, failText)
+                }
+            }
+        }
+    }
+
+    private fun startShift() {
+        if (SessionStore.isShiftOn()) return
+        SessionStore.startShift()
+        screen = Screen.CALLS
+        ShiftState.showLoading()
+        ShiftService.start(this)
+        askNotifications()
+        render()
+    }
+
+    private fun confirmEndShift() {
+        if (endConfirm?.isShowing == true) return
+        endConfirm = AlertDialog.Builder(this)
+            .setMessage(R.string.end_shift_confirm)
+            .setPositiveButton(R.string.end_shift) { _, _ -> endShift() }
+            .setNegativeButton(R.string.cancel, null)
+            .setOnDismissListener { endConfirm = null }
+            .show()
+    }
+
+    private fun endShift() {
+        SessionStore.endShift()
+        screen = Screen.SHIFT_OFF
+        ShiftState.showShiftOff()
         ShiftService.stop(this)
-        loginErrorText = null
-        screen = Screen.LOGIN
+        SignalPlayer.stop()
         render()
     }
 
@@ -209,11 +270,16 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
     private fun render() {
         val phase = ShiftState.phase
         val loggedIn = SessionStore.hasUsableSession()
+        val shiftOn = SessionStore.isShiftOn()
         when {
             !loggedIn || phase == ShiftState.Phase.LOGIN -> screen = Screen.LOGIN
-            phase == ShiftState.Phase.DENIED -> screen = Screen.DENIED
+            phase == ShiftState.Phase.DENIED && shiftOn -> screen = Screen.DENIED
+            !shiftOn -> screen = Screen.SHIFT_OFF
+            screen == Screen.DENIED || screen == Screen.SHIFT_OFF || screen == Screen.LOGIN ->
+                screen = Screen.CALLS
         }
         loginScreen.isVisible = screen == Screen.LOGIN
+        shiftOffScreen.isVisible = screen == Screen.SHIFT_OFF
         callsScreen.isVisible = screen == Screen.CALLS
         settingsScreen.isVisible = screen == Screen.SETTINGS
         deniedScreen.isVisible = screen == Screen.DENIED
@@ -224,7 +290,12 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
         loginButton.isEnabled = !loginInFlight
 
         val calls = ShiftState.calls
-        callsAdapter.submit(calls)
+        callsAdapter.submit(
+            calls,
+            canManage = ShiftState.canManage,
+            errors = ShiftState.statusErrors,
+            pending = ShiftState.pendingStatus.keys.toSet(),
+        )
         callsList.isVisible = screen == Screen.CALLS && calls.isNotEmpty()
         callsMessage.isVisible = screen == Screen.CALLS && calls.isEmpty()
         callsMessage.text = when {
@@ -240,6 +311,7 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
         ignoreSwitch = true
         soundSwitch.isChecked = SessionStore.soundEnabled()
         vibrationSwitch.isChecked = SessionStore.vibrationEnabled()
+        startShiftSwitch.isChecked = false
         ignoreSwitch = false
     }
 

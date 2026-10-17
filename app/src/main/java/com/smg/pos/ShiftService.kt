@@ -19,23 +19,29 @@ class ShiftService : Service() {
     private var wakeLock: PowerManager.WakeLock? = null
     private val wakeLockGuard = Any()
     private var lastCalls: List<WaiterCall> = emptyList()
+    private val callsLock = Any()
+    private var observedEpoch = -1L
+    private val overrides = HashMap<Int, SavedStatus>()
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        runningService = this
         createChannel()
         startInForeground()
         acquireWakeLock()
-        if (!SessionStore.hasUsableSession()) {
+        if (!SessionStore.hasUsableSession() || !SessionStore.isShiftOn()) {
             stopShift()
             return START_NOT_STICKY
         }
+        noteEpoch()
         ensurePollThread()
         return START_STICKY
     }
 
     override fun onDestroy() {
         running = false
+        if (runningService === this) runningService = null
         pollThread?.interrupt()
         SignalPlayer.stop()
         releaseWakeLock()
@@ -53,6 +59,11 @@ class ShiftService : Service() {
             val epoch = SessionStore.epoch
             try {
                 if (!running) return
+                noteEpoch()
+                if (!SessionStore.isShiftOn()) {
+                    stopShift()
+                    return
+                }
                 if (!SessionStore.hasUsableSession()) {
                     if (epoch == SessionStore.epoch && ShiftState.phase != ShiftState.Phase.LOGIN) {
                         SessionStore.clearSession()
@@ -61,19 +72,39 @@ class ShiftService : Service() {
                     stopShift()
                     return
                 }
+                if (!ShiftState.manageKnown) {
+                    when (val me = PosClient.fetchManagePermission()) {
+                        is PosClient.ManageResult.Known -> {
+                            if (running && epoch == SessionStore.epoch) ShiftState.publishCanManage(me.allowed)
+                        }
+                        PosClient.ManageResult.SessionExpired -> {
+                            if (!running || epoch != SessionStore.epoch) return
+                            SignalPlayer.stop()
+                            SessionStore.clearSession()
+                            ShiftState.showLogin(getString(R.string.session_expired))
+                            stopShift()
+                            return
+                        }
+                        PosClient.ManageResult.Network -> Unit
+                    }
+                }
                 acquireWakeLock()
+                val fetchedAt = System.currentTimeMillis()
                 when (val result = PosClient.fetchCalls()) {
                     is PosClient.CallsResult.Ok -> {
-                        if (!running || epoch != SessionStore.epoch) continue
+                        if (!running || epoch != SessionStore.epoch || !SessionStore.isShiftOn()) continue
                         val fresh = if (!SessionStore.isBaselineDone()) {
                             SessionStore.markBaseline(result.calls.map { it.id })
                             emptyList()
                         } else {
                             SessionStore.consumeNew(result.calls)
                         }
-                        lastCalls = result.calls
-                        ShiftState.showList(result.calls, isOffline = false)
-                        if (fresh.isNotEmpty()) SignalPlayer.enqueue(this, fresh.size)
+                        synchronized(callsLock) {
+                            if (!running || epoch != SessionStore.epoch || !SessionStore.isShiftOn()) return@synchronized
+                            lastCalls = applyOverrides(result.calls, fetchedAt)
+                            ShiftState.showList(lastCalls, isOffline = false)
+                            if (fresh.isNotEmpty()) SignalPlayer.enqueue(this, fresh.size)
+                        }
                     }
                     PosClient.CallsResult.Forbidden -> {
                         if (!running || epoch != SessionStore.epoch) continue
@@ -92,7 +123,9 @@ class ShiftService : Service() {
                     }
                     PosClient.CallsResult.Network -> {
                         if (!running || epoch != SessionStore.epoch) continue
-                        ShiftState.showList(lastCalls, isOffline = true)
+                        synchronized(callsLock) {
+                            ShiftState.showList(lastCalls, isOffline = true)
+                        }
                     }
                 }
             } catch (_: InterruptedException) {
@@ -110,6 +143,45 @@ class ShiftService : Service() {
                     return
                 }
                 waited += 200
+            }
+        }
+    }
+
+    private fun noteEpoch() {
+        val epoch = SessionStore.epoch
+        if (epoch == observedEpoch) return
+        observedEpoch = epoch
+        synchronized(callsLock) {
+            overrides.clear()
+            lastCalls = emptyList()
+        }
+    }
+
+    private fun rememberStatus(id: Int, status: String, epoch: Long) {
+        synchronized(callsLock) {
+            if (!running || epoch != SessionStore.epoch) return
+            overrides[id] = SavedStatus(status, System.currentTimeMillis())
+            val base = if (lastCalls.any { it.id == id }) lastCalls else ShiftState.calls
+            lastCalls = base.map { if (it.id == id) it.copy(status = status) else it }
+            ShiftState.showList(lastCalls, isOffline = false)
+        }
+    }
+
+    private fun applyOverrides(server: List<WaiterCall>, fetchedAt: Long): List<WaiterCall> {
+        if (overrides.isEmpty()) return server
+        overrides.keys.retainAll(server.mapTo(HashSet()) { it.id })
+        return server.map { call ->
+            val saved = overrides[call.id] ?: return@map call
+            when {
+                call.status == saved.status -> {
+                    overrides.remove(call.id)
+                    call
+                }
+                fetchedAt < saved.at -> call.copy(status = saved.status)
+                else -> {
+                    overrides.remove(call.id)
+                    call
+                }
             }
         }
     }
@@ -192,10 +264,26 @@ class ShiftService : Service() {
         stopSelf()
     }
 
+    private data class SavedStatus(val status: String, val at: Long)
+
     companion object {
         private const val CHANNEL_ID = "shift"
         private const val NOTIFICATION_ID = 1001
         private const val POLL_MS = 5_000
+
+        @Volatile
+        private var runningService: ShiftService? = null
+
+        fun applySavedStatus(id: Int, status: String, epoch: Long) {
+            val service = runningService
+            if (service == null) {
+                if (epoch != SessionStore.epoch) return
+                val merged = ShiftState.calls.map { if (it.id == id) it.copy(status = status) else it }
+                ShiftState.showList(merged, isOffline = false)
+                return
+            }
+            service.rememberStatus(id, status, epoch)
+        }
 
         fun start(context: Context) {
             context.startForegroundService(Intent(context, ShiftService::class.java))

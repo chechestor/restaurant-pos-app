@@ -31,6 +31,26 @@
         android:textColor="@color/text"
         android:textSize="16sp" />
 
+    <Button
+        android:id="@+id/call_status_change"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:minHeight="48dp"
+        android:text="@string/change_status"
+        android:textAllCaps="false"
+        android:textSize="16sp"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/call_status_error"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textColor="@color/error"
+        android:textSize="14sp"
+        android:visibility="gone" />
+
     <TextView
         android:id="@+id/call_created"
         android:layout_width="match_parent"

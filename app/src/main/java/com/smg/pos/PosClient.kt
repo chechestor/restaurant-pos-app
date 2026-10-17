@@ -13,6 +13,7 @@ import java.util.concurrent.TimeUnit
 
 object PosClient {
     private const val BASE = "https://pos-api.smg-international.com"
+    private const val MANAGE_STATUS = "waiter_calls.manage_status"
     private val jsonType = "application/json; charset=utf-8".toMediaType()
     private val http = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -32,6 +33,18 @@ object PosClient {
         data object Forbidden : CallsResult()
         data object SessionExpired : CallsResult()
         data object Network : CallsResult()
+    }
+
+    sealed class ManageResult {
+        data class Known(val allowed: Boolean) : ManageResult()
+        data object SessionExpired : ManageResult()
+        data object Network : ManageResult()
+    }
+
+    sealed class StatusResult {
+        data class Ok(val status: String) : StatusResult()
+        data object Failed : StatusResult()
+        data object SessionExpired : StatusResult()
     }
 
     fun login(email: String, password: String): LoginResult {
@@ -62,24 +75,26 @@ object PosClient {
         }
     }
 
-    fun fetchCalls(): CallsResult {
-        if (!SessionStore.hasUsableSession()) return CallsResult.SessionExpired
-        if (SessionStore.accessNeedsRefresh()) {
-            when (refresh(force = false)) {
-                Refresh.Expired -> return CallsResult.SessionExpired
-                Refresh.Network -> return CallsResult.Network
-                Refresh.Ok -> Unit
-            }
-        }
-        return when (val first = getCalls()) {
-            CallsResult.SessionExpired -> when (refresh(force = true)) {
-                Refresh.Expired -> CallsResult.SessionExpired
-                Refresh.Network -> CallsResult.Network
-                Refresh.Ok -> getCalls()
-            }
-            else -> first
-        }
-    }
+    fun fetchCalls(): CallsResult = authorized(
+        expired = CallsResult.SessionExpired,
+        network = CallsResult.Network,
+        call = { getCalls() },
+        isExpired = { it is CallsResult.SessionExpired },
+    )
+
+    fun fetchManagePermission(): ManageResult = authorized(
+        expired = ManageResult.SessionExpired,
+        network = ManageResult.Network,
+        call = { getManagePermission() },
+        isExpired = { it is ManageResult.SessionExpired },
+    )
+
+    fun updateStatus(id: Int, status: String): StatusResult = authorized(
+        expired = StatusResult.SessionExpired,
+        network = StatusResult.Failed,
+        call = { putStatus(id, status) },
+        isExpired = { it is StatusResult.SessionExpired },
+    )
 
     private fun getCalls(): CallsResult {
         val access = SessionStore.accessToken() ?: return CallsResult.SessionExpired
@@ -99,6 +114,75 @@ object PosClient {
             }
         } catch (_: Exception) {
             CallsResult.Network
+        }
+    }
+
+    private fun getManagePermission(): ManageResult {
+        val access = SessionStore.accessToken() ?: return ManageResult.SessionExpired
+        val request = Request.Builder()
+            .url("$BASE/api/auth/me")
+            .header("Authorization", "Bearer $access")
+            .get()
+            .build()
+        return try {
+            http.newCall(request).execute().use { response ->
+                when (response.code) {
+                    200 -> ManageResult.Known(canManageStatus(response.body?.string().orEmpty()))
+                    401 -> ManageResult.SessionExpired
+                    else -> ManageResult.Network
+                }
+            }
+        } catch (_: Exception) {
+            ManageResult.Network
+        }
+    }
+
+    private fun putStatus(id: Int, status: String): StatusResult {
+        val access = SessionStore.accessToken() ?: return StatusResult.SessionExpired
+        val body = JSONObject().put("status", status).toString()
+        val request = Request.Builder()
+            .url("$BASE/api/admin/waiter-calls/$id/status")
+            .header("Authorization", "Bearer $access")
+            .put(body.toRequestBody(jsonType))
+            .build()
+        return try {
+            http.newCall(request).execute().use { response ->
+                when (response.code) {
+                    200 -> {
+                        val confirmed = runCatching {
+                            JSONObject(response.body?.string().orEmpty()).optString("status")
+                        }.getOrNull().orEmpty().ifBlank { status }
+                        StatusResult.Ok(confirmed)
+                    }
+                    401 -> StatusResult.SessionExpired
+                    else -> StatusResult.Failed
+                }
+            }
+        } catch (_: Exception) {
+            StatusResult.Failed
+        }
+    }
+
+    private fun <T> authorized(
+        expired: T,
+        network: T,
+        call: () -> T,
+        isExpired: (T) -> Boolean,
+    ): T {
+        if (!SessionStore.hasUsableSession()) return expired
+        if (SessionStore.accessNeedsRefresh()) {
+            when (refresh(force = false)) {
+                Refresh.Expired -> return expired
+                Refresh.Network -> return network
+                Refresh.Ok -> Unit
+            }
+        }
+        val first = call()
+        if (!isExpired(first)) return first
+        return when (refresh(force = true)) {
+            Refresh.Expired -> expired
+            Refresh.Network -> network
+            Refresh.Ok -> call()
         }
     }
 
@@ -143,19 +227,40 @@ object PosClient {
         val array = JSONArray(body)
         val calls = ArrayList<WaiterCall>(array.length())
         for (i in 0 until array.length()) {
-            val item = array.getJSONObject(i)
-            val device = item.optJSONObject("device")
-            calls.add(
-                WaiterCall(
-                    id = item.getInt("id"),
-                    tableNumber = device?.optString("table_number").orEmpty(),
-                    reason = item.optString("reason"),
-                    status = item.optString("status"),
-                    createdAt = parseInstant(item.optString("created_at")),
-                ),
-            )
+            calls.add(parseCall(array.getJSONObject(i)))
         }
         return calls.sortedByDescending { it.createdAt ?: Instant.EPOCH }
+    }
+
+    private fun parseCall(item: JSONObject): WaiterCall {
+        val device = item.optJSONObject("device")
+        return WaiterCall(
+            id = item.getInt("id"),
+            tableNumber = device?.optString("table_number").orEmpty(),
+            reason = item.optString("reason"),
+            status = item.optString("status"),
+            createdAt = parseInstant(item.optString("created_at")),
+        )
+    }
+
+    private fun canManageStatus(body: String): Boolean {
+        val permissions = JSONObject(body).optJSONObject("permissions") ?: return false
+        val global = permissions.optJSONArray("global") ?: permissions.optJSONArray("global_")
+        if (permissions.optBoolean("all_restaurants") && contains(global, MANAGE_STATUS)) return true
+        val restaurants = permissions.optJSONObject("restaurants") ?: return false
+        val keys = restaurants.keys()
+        while (keys.hasNext()) {
+            if (contains(restaurants.optJSONArray(keys.next()), MANAGE_STATUS)) return true
+        }
+        return false
+    }
+
+    private fun contains(array: JSONArray?, value: String): Boolean {
+        if (array == null) return false
+        for (i in 0 until array.length()) {
+            if (array.optString(i) == value) return true
+        }
+        return false
     }
 
     private fun parseInstant(raw: String): Instant? {

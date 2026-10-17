@@ -33,12 +33,14 @@ jobs:
           else
             name=smgposdev
           fi
-          cp app/build/outputs/apk/debug/app-debug.apk "${name}.apk"
+          rm -rf packed
+          mkdir packed
+          cp app/build/outputs/apk/debug/app-debug.apk "packed/${name}.apk"
+          cp scripts/install.ps1 packed/install.ps1
           echo "name=${name}" >> "$GITHUB_OUTPUT"
-          echo "file=${name}.apk" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.apk.outputs.name }}
-          path: ${{ steps.apk.outputs.file }}
+          path: packed/
           if-no-files-found: error
