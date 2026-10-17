@@ -27,6 +27,9 @@ object ShiftState {
     var canManage: Boolean = false
 
     @Volatile
+    var showRestaurant: Boolean = false
+
+    @Volatile
     var manageKnown: Boolean = false
 
     @Volatile
@@ -81,8 +84,9 @@ object ShiftState {
         resetStatusAccess()
     }
 
-    fun publishCanManage(allowed: Boolean) = publish {
+    fun publishCanManage(allowed: Boolean, showRestaurant: Boolean) = publish {
         canManage = allowed
+        this.showRestaurant = showRestaurant
         manageKnown = true
     }
 
@@ -98,6 +102,7 @@ object ShiftState {
 
     private fun resetStatusAccess() {
         canManage = false
+        showRestaurant = false
         manageKnown = false
         pendingStatus = emptyMap()
         statusErrors = emptyMap()

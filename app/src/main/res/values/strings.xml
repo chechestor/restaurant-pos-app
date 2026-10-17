@@ -23,6 +23,7 @@
     <string name="offline">Нет связи</string>
     <string name="offline_stale">Нет связи. Показан последний список.</string>
     <string name="notifications_off">Уведомления выключены. Сигнал о новом вызове работать не будет.</string>
+    <string name="battery_unrestricted">Разрешить работу без ограничения батареи</string>
     <string name="sound">Звук</string>
     <string name="vibration">Вибрация</string>
     <string name="volume_hint">Громкость берётся из системных уведомлений.</string>
@@ -31,6 +32,7 @@
     <string name="shift_running_detail">Приложение следит за вызовами</string>
     <string name="shift_channel">Смена</string>
     <string name="field_table">Стол: %1$s</string>
+    <string name="field_restaurant">Ресторан: %1$s</string>
     <string name="field_reason">Причина: %1$s</string>
     <string name="field_status">Статус: %1$s</string>
     <string name="field_created">Создан: %1$s</string>

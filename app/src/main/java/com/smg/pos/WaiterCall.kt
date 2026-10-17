@@ -5,6 +5,7 @@ import java.time.Instant
 data class WaiterCall(
     val id: Int,
     val tableNumber: String,
+    val restaurantName: String,
     val reason: String,
     val status: String,
     val createdAt: Instant?,

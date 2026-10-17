@@ -100,7 +100,7 @@ class ShiftService : Service() {
                     when (val me = PosClient.fetchManagePermission()) {
                         is PosClient.ManageResult.Known -> {
                             if (running && generation == pollGeneration && epoch == SessionStore.epoch) {
-                                ShiftState.publishCanManage(me.allowed)
+                                ShiftState.publishCanManage(me.allowed, me.showRestaurant)
                             }
                         }
                         PosClient.ManageResult.SessionExpired -> {

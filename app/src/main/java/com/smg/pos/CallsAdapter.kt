@@ -17,6 +17,7 @@ class CallsAdapter : RecyclerView.Adapter<CallsAdapter.Holder>() {
     private val timeFormat = DateTimeFormatter.ofPattern("dd.MM.yyyy, HH:mm", Locale("ru"))
     private val statusCodes = listOf("new", "in_progress", "done", "cancelled")
     private var canManage = false
+    private var showRestaurant = false
     private var errors: Map<Int, String> = emptyMap()
     private var pending: Set<Int> = emptySet()
 
@@ -25,13 +26,23 @@ class CallsAdapter : RecyclerView.Adapter<CallsAdapter.Holder>() {
     fun submit(
         calls: List<WaiterCall>,
         canManage: Boolean,
+        showRestaurant: Boolean,
         errors: Map<Int, String>,
         pending: Set<Int>,
     ) {
-        if (items == calls && this.canManage == canManage && this.errors == errors && this.pending == pending) return
+        if (
+            items == calls &&
+            this.canManage == canManage &&
+            this.showRestaurant == showRestaurant &&
+            this.errors == errors &&
+            this.pending == pending
+        ) {
+            return
+        }
         items.clear()
         items.addAll(calls)
         this.canManage = canManage
+        this.showRestaurant = showRestaurant
         this.errors = errors
         this.pending = pending
         notifyDataSetChanged()
@@ -48,6 +59,9 @@ class CallsAdapter : RecyclerView.Adapter<CallsAdapter.Holder>() {
         val call = items[position]
         val table = call.tableNumber.ifBlank { "—" }
         holder.table.text = holder.itemView.context.getString(R.string.field_table, table)
+        val restaurant = call.restaurantName.ifBlank { "—" }
+        holder.restaurant.isVisible = showRestaurant
+        holder.restaurant.text = holder.itemView.context.getString(R.string.field_restaurant, restaurant)
         holder.reason.text = holder.itemView.context.getString(R.string.field_reason, reasonLabel(call.reason))
         holder.status.text = holder.itemView.context.getString(R.string.field_status, statusLabel(call.status))
         val created = call.createdAt?.atZone(ZoneId.systemDefault())?.let { timeFormat.format(it) } ?: "—"
@@ -84,6 +98,7 @@ class CallsAdapter : RecyclerView.Adapter<CallsAdapter.Holder>() {
 
     class Holder(view: View) : RecyclerView.ViewHolder(view) {
         val table: TextView = view.findViewById(R.id.call_table)
+        val restaurant: TextView = view.findViewById(R.id.call_restaurant)
         val reason: TextView = view.findViewById(R.id.call_reason)
         val status: TextView = view.findViewById(R.id.call_status)
         val created: TextView = view.findViewById(R.id.call_created)

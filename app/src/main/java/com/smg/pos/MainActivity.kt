@@ -1,9 +1,13 @@
 package com.smg.pos
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.PowerManager
+import android.provider.Settings
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
@@ -32,6 +36,8 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
     private lateinit var callsMessage: TextView
     private lateinit var callsOffline: TextView
     private lateinit var callsNotifications: TextView
+    private lateinit var batteryButton: Button
+    private lateinit var deniedBatteryButton: Button
     private lateinit var soundSwitch: SwitchCompat
     private lateinit var vibrationSwitch: SwitchCompat
     private lateinit var startShiftSwitch: SwitchCompat
@@ -108,6 +114,8 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
         callsMessage = findViewById(R.id.calls_message)
         callsOffline = findViewById(R.id.calls_offline)
         callsNotifications = findViewById(R.id.calls_notifications)
+        batteryButton = findViewById(R.id.battery_button)
+        deniedBatteryButton = findViewById(R.id.denied_battery_button)
         soundSwitch = findViewById(R.id.sound_switch)
         vibrationSwitch = findViewById(R.id.vibration_switch)
         startShiftSwitch = findViewById(R.id.start_shift_switch)
@@ -127,6 +135,8 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
         }
         findViewById<View>(R.id.end_shift_button).setOnClickListener { confirmEndShift() }
         findViewById<View>(R.id.denied_end_shift).setOnClickListener { confirmEndShift() }
+        batteryButton.setOnClickListener { requestBatteryExemption() }
+        deniedBatteryButton.setOnClickListener { requestBatteryExemption() }
         startShiftSwitch.setOnCheckedChangeListener { _, checked ->
             if (!ignoreSwitch && checked) startShift()
         }
@@ -238,6 +248,21 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
         render()
     }
 
+    private fun batteryRestricted(): Boolean {
+        val power = getSystemService(PowerManager::class.java) ?: return false
+        return !power.isIgnoringBatteryOptimizations(packageName)
+    }
+
+    private fun requestBatteryExemption() {
+        if (!batteryRestricted()) {
+            render()
+            return
+        }
+        val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
+            .setData(Uri.parse("package:$packageName"))
+        runCatching { startActivity(intent) }
+    }
+
     private fun askNotifications() {
         if (Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
@@ -271,6 +296,7 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
         callsAdapter.submit(
             calls,
             canManage = ShiftState.canManage,
+            showRestaurant = ShiftState.showRestaurant,
             errors = ShiftState.statusErrors,
             pending = ShiftState.pendingStatus.keys.toSet(),
         )
@@ -285,6 +311,9 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
 
         val notificationsOff = !NotificationManagerCompat.from(this).areNotificationsEnabled()
         callsNotifications.isVisible = screen == Screen.CALLS && notificationsOff
+        val batteryRestricted = batteryRestricted()
+        batteryButton.isVisible = screen == Screen.CALLS && batteryRestricted
+        deniedBatteryButton.isVisible = screen == Screen.DENIED && batteryRestricted
 
         ignoreSwitch = true
         soundSwitch.isChecked = SessionStore.soundEnabled()

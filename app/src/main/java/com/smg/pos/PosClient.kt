@@ -36,7 +36,7 @@ object PosClient {
     }
 
     sealed class ManageResult {
-        data class Known(val allowed: Boolean) : ManageResult()
+        data class Known(val allowed: Boolean, val showRestaurant: Boolean) : ManageResult()
         data object SessionExpired : ManageResult()
         data object Network : ManageResult()
     }
@@ -127,7 +127,14 @@ object PosClient {
         return try {
             http.newCall(request).execute().use { response ->
                 when (response.code) {
-                    200 -> ManageResult.Known(canManageStatus(response.body?.string().orEmpty()))
+                    200 -> {
+                        val root = JSONObject(response.body?.string().orEmpty())
+                        val permissions = root.optJSONObject("permissions")
+                        ManageResult.Known(
+                            allowed = canManageStatus(permissions),
+                            showRestaurant = showsRestaurant(root, permissions),
+                        )
+                    }
                     401 -> ManageResult.SessionExpired
                     else -> ManageResult.Network
                 }
@@ -237,14 +244,21 @@ object PosClient {
         return WaiterCall(
             id = item.getInt("id"),
             tableNumber = device?.optString("table_number").orEmpty(),
+            restaurantName = device?.optString("restaurant_name").orEmpty(),
             reason = item.optString("reason"),
             status = item.optString("status"),
             createdAt = parseInstant(item.optString("created_at")),
         )
     }
 
-    private fun canManageStatus(body: String): Boolean {
-        val permissions = JSONObject(body).optJSONObject("permissions") ?: return false
+    private fun showsRestaurant(root: JSONObject, permissions: JSONObject?): Boolean {
+        if (permissions?.optBoolean("all_restaurants") == true) return true
+        val ids = root.optJSONArray("restaurant_ids") ?: return true
+        return ids.length() != 1
+    }
+
+    private fun canManageStatus(permissions: JSONObject?): Boolean {
+        if (permissions == null) return false
         val global = permissions.optJSONArray("global") ?: permissions.optJSONArray("global_")
         if (permissions.optBoolean("all_restaurants") && contains(global, MANAGE_STATUS)) return true
         val restaurants = permissions.optJSONObject("restaurants") ?: return false

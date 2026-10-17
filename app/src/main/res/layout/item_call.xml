@@ -16,6 +16,15 @@
         android:textStyle="bold" />
 
     <TextView
+        android:id="@+id/call_restaurant"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:textColor="@color/text"
+        android:textSize="16sp"
+        android:visibility="gone" />
+
+    <TextView
         android:id="@+id/call_reason"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
