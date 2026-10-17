@@ -8,6 +8,7 @@ import android.widget.Button
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
+import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.chip.Chip
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -26,12 +27,17 @@ class CallsAdapter : RecyclerView.Adapter<CallsAdapter.Holder>() {
 
     var onStatusSelected: ((callId: Int, status: String) -> Unit)? = null
 
+    init {
+        setHasStableIds(true)
+    }
+
     fun submit(
         calls: List<WaiterCall>,
         canManage: Boolean,
         showRestaurant: Boolean,
         errors: Map<Int, String>,
         pending: Set<Int>,
+        animate: Boolean,
     ) {
         if (
             items == calls &&
@@ -42,14 +48,31 @@ class CallsAdapter : RecyclerView.Adapter<CallsAdapter.Holder>() {
         ) {
             return
         }
+        val previous = items.toList()
+        val metaChanged = this.canManage != canManage ||
+            this.showRestaurant != showRestaurant ||
+            this.errors != errors ||
+            this.pending != pending
         items.clear()
         items.addAll(calls)
         this.canManage = canManage
         this.showRestaurant = showRestaurant
         this.errors = errors
         this.pending = pending
-        notifyDataSetChanged()
+        if (!animate) {
+            notifyDataSetChanged()
+            return
+        }
+        DiffUtil.calculateDiff(CallDiff(previous, items.toList())).dispatchUpdatesTo(this)
+        if (!metaChanged) return
+        for (index in items.indices) {
+            val current = items[index]
+            val prior = previous.find { it.id == current.id } ?: continue
+            if (prior == current) notifyItemChanged(index)
+        }
     }
+
+    override fun getItemId(position: Int): Long = items[position].id.toLong()
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_call, parent, false)
@@ -119,5 +142,22 @@ class CallsAdapter : RecyclerView.Adapter<CallsAdapter.Holder>() {
         chip.text = statusLabel(status)
         chip.chipBackgroundColor = ColorStateList.valueOf(ContextCompat.getColor(chip.context, background))
         chip.setTextColor(ContextCompat.getColor(chip.context, foreground))
+    }
+
+    private class CallDiff(
+        private val old: List<WaiterCall>,
+        private val new: List<WaiterCall>,
+    ) : DiffUtil.Callback() {
+        override fun getOldListSize(): Int = old.size
+
+        override fun getNewListSize(): Int = new.size
+
+        override fun areItemsTheSame(oldPosition: Int, newPosition: Int): Boolean {
+            return old[oldPosition].id == new[newPosition].id
+        }
+
+        override fun areContentsTheSame(oldPosition: Int, newPosition: Int): Boolean {
+            return old[oldPosition] == new[newPosition]
+        }
     }
 }

@@ -22,6 +22,7 @@ import androidx.core.app.NotificationManagerCompat
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.slider.Slider
 import androidx.core.view.isVisible
+import androidx.recyclerview.widget.DefaultItemAnimator
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import kotlin.concurrent.thread
@@ -58,6 +59,7 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
     private var ignoreSwitch = false
     private var loginErrorText: String? = null
     private var endConfirm: AlertDialog? = null
+    private var callsOpened = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -142,6 +144,13 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
 
         callsList.layoutManager = LinearLayoutManager(this)
         callsList.adapter = callsAdapter
+        callsList.itemAnimator = DefaultItemAnimator().apply {
+            addDuration = 330
+            moveDuration = 330
+            changeDuration = 0
+            removeDuration = 0
+            supportsChangeAnimations = false
+        }
         callsAdapter.onStatusSelected = { callId, status -> changeStatus(callId, status) }
 
         loginButton.setOnClickListener { attemptLogin() }
@@ -361,13 +370,16 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
         loginButton.isEnabled = !loginInFlight
 
         val calls = ShiftState.calls
+        val animateArrivals = callsOpened && phase == ShiftState.Phase.LIST
         callsAdapter.submit(
             calls,
             canManage = ShiftState.canManage,
             showRestaurant = ShiftState.showRestaurant,
             errors = ShiftState.statusErrors,
             pending = ShiftState.pendingStatus.keys.toSet(),
+            animate = animateArrivals,
         )
+        callsOpened = phase == ShiftState.Phase.LIST && shiftOn
         callsList.isVisible = screen == Screen.CALLS && calls.isNotEmpty()
         callsMessage.isVisible = screen == Screen.CALLS && calls.isEmpty()
         callsMessage.text = when {
