@@ -1,13 +1,16 @@
 package com.smg.pos
 
+import android.content.res.ColorStateList
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.chip.Chip
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -63,7 +66,7 @@ class CallsAdapter : RecyclerView.Adapter<CallsAdapter.Holder>() {
         holder.restaurant.isVisible = showRestaurant
         holder.restaurant.text = holder.itemView.context.getString(R.string.field_restaurant, restaurant)
         holder.reason.text = holder.itemView.context.getString(R.string.field_reason, reasonLabel(call.reason))
-        holder.status.text = holder.itemView.context.getString(R.string.field_status, statusLabel(call.status))
+        paintStatus(holder.status, call.status)
         val created = call.createdAt?.atZone(ZoneId.systemDefault())?.let { timeFormat.format(it) } ?: "—"
         holder.created.text = holder.itemView.context.getString(R.string.field_created, created)
 
@@ -86,7 +89,7 @@ class CallsAdapter : RecyclerView.Adapter<CallsAdapter.Holder>() {
         val call = items[position]
         if (call.id in pending) return
         val labels = statusCodes.map { statusLabel(it) }.toTypedArray()
-        AlertDialog.Builder(holder.itemView.context)
+        MaterialAlertDialogBuilder(holder.itemView.context)
             .setTitle(R.string.change_status)
             .setItems(labels) { _, which ->
                 val chosen = statusCodes[which]
@@ -100,9 +103,21 @@ class CallsAdapter : RecyclerView.Adapter<CallsAdapter.Holder>() {
         val table: TextView = view.findViewById(R.id.call_table)
         val restaurant: TextView = view.findViewById(R.id.call_restaurant)
         val reason: TextView = view.findViewById(R.id.call_reason)
-        val status: TextView = view.findViewById(R.id.call_status)
+        val status: Chip = view.findViewById(R.id.call_status)
         val created: TextView = view.findViewById(R.id.call_created)
         val change: Button = view.findViewById(R.id.call_status_change)
         val error: TextView = view.findViewById(R.id.call_status_error)
+    }
+
+    private fun paintStatus(chip: Chip, status: String) {
+        val (background, foreground) = when (status) {
+            "new" -> R.color.status_new_bg to R.color.status_new_text
+            "in_progress" -> R.color.status_progress_bg to R.color.status_progress_text
+            "done" -> R.color.status_done_bg to R.color.status_done_text
+            else -> R.color.status_cancelled_bg to R.color.status_cancelled_text
+        }
+        chip.text = statusLabel(status)
+        chip.chipBackgroundColor = ColorStateList.valueOf(ContextCompat.getColor(chip.context, background))
+        chip.setTextColor(ContextCompat.getColor(chip.context, foreground))
     }
 }

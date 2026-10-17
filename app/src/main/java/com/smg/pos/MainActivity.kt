@@ -12,7 +12,6 @@ import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
 import android.widget.RadioGroup
-import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.activity.OnBackPressedCallback
@@ -20,6 +19,8 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
 import androidx.core.app.NotificationManagerCompat
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.slider.Slider
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -45,9 +46,9 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
     private lateinit var soundSwitch: SwitchCompat
     private lateinit var vibrationSwitch: SwitchCompat
     private lateinit var durationLabel: TextView
-    private lateinit var durationSeek: SeekBar
+    private lateinit var durationSeek: Slider
     private lateinit var strengthBlock: View
-    private lateinit var strengthSeek: SeekBar
+    private lateinit var strengthSeek: Slider
     private lateinit var themeGroup: RadioGroup
     private lateinit var startShiftSwitch: SwitchCompat
     private val callsAdapter = CallsAdapter()
@@ -168,28 +169,14 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
         vibrationSwitch.setOnCheckedChangeListener { _, checked ->
             if (!ignoreSwitch) SessionStore.setVibrationEnabled(checked)
         }
-        durationSeek.max = SessionStore.VIBRATION_MS_MAX - SessionStore.VIBRATION_MS_MIN
-        strengthSeek.max = SessionStore.VIBRATION_AMPLITUDE_MAX - SessionStore.VIBRATION_AMPLITUDE_MIN
-        durationSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                val ms = SessionStore.VIBRATION_MS_MIN + progress
-                durationLabel.text = durationText(ms)
-                if (fromUser) SessionStore.setVibrationDurationMs(ms)
-            }
-
-            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
-
-            override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
-        })
-        strengthSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
-                if (fromUser) SessionStore.setVibrationAmplitude(SessionStore.VIBRATION_AMPLITUDE_MIN + progress)
-            }
-
-            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
-
-            override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
-        })
+        durationSeek.addOnChangeListener { _, value, fromUser ->
+            val ms = SessionStore.VIBRATION_MS_MIN + value.toInt()
+            durationLabel.text = durationText(ms)
+            if (fromUser) SessionStore.setVibrationDurationMs(ms)
+        }
+        strengthSeek.addOnChangeListener { _, value, fromUser ->
+            if (fromUser) SessionStore.setVibrationAmplitude(SessionStore.VIBRATION_AMPLITUDE_MIN + value.toInt())
+        }
         themeGroup.setOnCheckedChangeListener { _, checkedId ->
             if (ignoreSwitch) return@setOnCheckedChangeListener
             val theme = when (checkedId) {
@@ -286,7 +273,7 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
 
     private fun confirmEndShift() {
         if (endConfirm?.isShowing == true) return
-        endConfirm = AlertDialog.Builder(this)
+        endConfirm = MaterialAlertDialogBuilder(this)
             .setMessage(R.string.end_shift_confirm)
             .setPositiveButton(R.string.end_shift) { _, _ -> endShift() }
             .setNegativeButton(R.string.cancel, null)
@@ -398,11 +385,11 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
         soundSwitch.isChecked = SessionStore.soundEnabled()
         vibrationSwitch.isChecked = SessionStore.vibrationEnabled()
         startShiftSwitch.isChecked = false
-        val durationProgress = SessionStore.vibrationDurationMs() - SessionStore.VIBRATION_MS_MIN
-        if (durationSeek.progress != durationProgress) durationSeek.progress = durationProgress
+        val durationProgress = (SessionStore.vibrationDurationMs() - SessionStore.VIBRATION_MS_MIN).toFloat()
+        if (durationSeek.value != durationProgress) durationSeek.value = durationProgress
         durationLabel.text = durationText(SessionStore.vibrationDurationMs())
-        val strengthProgress = SessionStore.vibrationAmplitude() - SessionStore.VIBRATION_AMPLITUDE_MIN
-        if (strengthSeek.progress != strengthProgress) strengthSeek.progress = strengthProgress
+        val strengthProgress = (SessionStore.vibrationAmplitude() - SessionStore.VIBRATION_AMPLITUDE_MIN).toFloat()
+        if (strengthSeek.value != strengthProgress) strengthSeek.value = strengthProgress
         strengthBlock.isVisible = SignalPlayer.supportsAmplitude(this)
         themeGroup.check(
             when (SessionStore.theme()) {
