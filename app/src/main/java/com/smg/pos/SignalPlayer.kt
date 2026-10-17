@@ -14,6 +14,7 @@ object SignalPlayer {
     private val queue = ArrayDeque<Int>()
     private var worker: Thread? = null
     private var player: MediaPlayer? = null
+    private var vibrator: Vibrator? = null
     private var stopped = false
 
     fun enqueue(context: Context, count: Int) {
@@ -30,18 +31,21 @@ object SignalPlayer {
     }
 
     fun stop() {
-        val current = synchronized(lock) {
+        val active = synchronized(lock) {
             stopped = true
             queue.clear()
-            val active = player
+            val playing = player
             player = null
+            val buzzing = vibrator
+            vibrator = null
             lock.notifyAll()
-            active
+            playing to buzzing
         }
-        current?.runCatching {
+        active.first?.runCatching {
             stop()
             release()
         }
+        active.second?.cancel()
     }
 
     private fun drain(app: Context) {
@@ -81,8 +85,9 @@ object SignalPlayer {
         }
         if (vibration) vibrate(app)
 
+        val vibrationMs = if (vibration) SessionStore.vibrationDurationMs().toLong() else 0L
         val soundMs = media?.duration?.takeIf { it > 0 }?.toLong() ?: if (sound) 500L else 0L
-        val waitMs = maxOf(soundMs, if (vibration) 300L else 0L)
+        val waitMs = maxOf(soundMs, vibrationMs)
         val end = System.currentTimeMillis() + waitMs
         while (System.currentTimeMillis() < end) {
             if (synchronized(lock) { stopped }) break
@@ -117,14 +122,32 @@ object SignalPlayer {
     }
 
     private fun vibrate(app: Context) {
+        val vibrator = deviceVibrator(app) ?: return
+        val duration = SessionStore.vibrationDurationMs().toLong()
+        val amplitude = if (vibrator.hasAmplitudeControl()) {
+            SessionStore.vibrationAmplitude()
+        } else {
+            VibrationEffect.DEFAULT_AMPLITUDE
+        }
+        synchronized(lock) {
+            if (stopped) return
+            this.vibrator = vibrator
+        }
+        vibrator.vibrate(VibrationEffect.createOneShot(duration, amplitude))
+        if (synchronized(lock) { stopped }) vibrator.cancel()
+    }
+
+    private fun deviceVibrator(app: Context): Vibrator? {
         val vibrator = if (Build.VERSION.SDK_INT >= 31) {
-            val manager = app.getSystemService(VibratorManager::class.java)
-            manager?.defaultVibrator
+            app.getSystemService(VibratorManager::class.java)?.defaultVibrator
         } else {
             @Suppress("DEPRECATION")
             app.getSystemService(Context.VIBRATOR_SERVICE) as? Vibrator
-        } ?: return
-        if (!vibrator.hasVibrator()) return
-        vibrator.vibrate(VibrationEffect.createOneShot(300, VibrationEffect.DEFAULT_AMPLITUDE))
+        } ?: return null
+        return vibrator.takeIf { it.hasVibrator() }
+    }
+
+    fun supportsAmplitude(context: Context): Boolean {
+        return deviceVibrator(context.applicationContext)?.hasAmplitudeControl() == true
     }
 }

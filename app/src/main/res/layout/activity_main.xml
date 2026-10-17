@@ -116,56 +116,35 @@
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:gravity="top"
+            android:gravity="center_vertical"
             android:orientation="horizontal">
 
-            <LinearLayout
+            <TextView
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:layout_marginEnd="8dp"
                 android:layout_weight="1"
-                android:orientation="vertical">
+                android:text="@string/calls_title"
+                android:textColor="@color/text"
+                android:textSize="24sp"
+                android:textStyle="bold" />
 
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/calls_title"
-                    android:textColor="@color/text"
-                    android:textSize="24sp"
-                    android:textStyle="bold" />
-
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/sound_switch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:text="@string/sound"
-                    android:textColor="@color/text"
-                    android:textSize="16sp" />
-
-                <androidx.appcompat.widget.SwitchCompat
-                    android:id="@+id/vibration_switch"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:minHeight="48dp"
-                    android:text="@string/vibration"
-                    android:textColor="@color/text"
-                    android:textSize="16sp" />
-
-                <TextView
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/volume_hint"
-                    android:textColor="@color/muted"
-                    android:textSize="13sp" />
-            </LinearLayout>
+            <ImageButton
+                android:id="@+id/settings_button"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/settings"
+                android:padding="12dp"
+                android:scaleType="centerInside"
+                android:src="@drawable/ic_settings" />
 
             <ImageButton
                 android:id="@+id/end_shift_button"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
                 android:background="?attr/selectableItemBackgroundBorderless"
                 android:contentDescription="@string/end_shift"
+                android:padding="12dp"
                 android:scaleType="centerInside"
                 android:src="@drawable/ic_end_shift" />
         </LinearLayout>
@@ -179,19 +158,6 @@
             android:padding="12dp"
             android:text="@string/notifications_off"
             android:textColor="@color/text"
-            android:visibility="gone" />
-
-        <Button
-            android:id="@+id/battery_button"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:backgroundTint="@color/primary"
-            android:minHeight="52dp"
-            android:text="@string/battery_unrestricted"
-            android:textAllCaps="false"
-            android:textColor="@color/button_text"
-            android:textSize="16sp"
             android:visibility="gone" />
 
         <TextView
@@ -221,35 +187,158 @@
             android:visibility="gone" />
     </LinearLayout>
 
-    <LinearLayout
-        android:id="@+id/screen_denied"
+    <ScrollView
+        android:id="@+id/screen_settings"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:gravity="center_horizontal"
-        android:orientation="vertical"
-        android:padding="24dp"
+        android:fillViewport="true"
         android:visibility="gone">
 
-        <ImageButton
-            android:id="@+id/denied_end_shift"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_gravity="end"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/end_shift"
-            android:scaleType="centerInside"
-            android:src="@drawable/ic_end_shift" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
 
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="@string/denied"
+            android:text="@string/settings"
             android:textColor="@color/text"
-            android:textSize="20sp" />
+            android:textSize="24sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="@string/theme"
+            android:textColor="@color/text"
+            android:textSize="16sp" />
+
+        <RadioGroup
+            android:id="@+id/theme_group"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <RadioButton
+                android:id="@+id/theme_dark"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:text="@string/theme_dark"
+                android:textColor="@color/text"
+                android:textSize="18sp" />
+
+            <RadioButton
+                android:id="@+id/theme_light"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:text="@string/theme_light"
+                android:textColor="@color/text"
+                android:textSize="18sp" />
+
+            <RadioButton
+                android:id="@+id/theme_system"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:minHeight="48dp"
+                android:text="@string/theme_system"
+                android:textColor="@color/text"
+                android:textSize="18sp" />
+        </RadioGroup>
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/sound_switch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:minHeight="48dp"
+            android:text="@string/sound"
+            android:textColor="@color/text"
+            android:textSize="18sp" />
+
+        <androidx.appcompat.widget.SwitchCompat
+            android:id="@+id/vibration_switch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:minHeight="48dp"
+            android:text="@string/vibration"
+            android:textColor="@color/text"
+            android:textSize="18sp" />
+
+        <TextView
+            android:id="@+id/vibration_duration_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:textColor="@color/text"
+            android:textSize="16sp" />
+
+        <SeekBar
+            android:id="@+id/vibration_duration"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:max="2800"
+            android:minHeight="48dp" />
+
+        <LinearLayout
+            android:id="@+id/vibration_strength_block"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:text="@string/vibration_strength"
+                android:textColor="@color/text"
+                android:textSize="16sp" />
+
+            <SeekBar
+                android:id="@+id/vibration_strength"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:max="254"
+                android:minHeight="48dp" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="@string/vibration_weak"
+                    android:textColor="@color/muted"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/vibration_max"
+                    android:textColor="@color/muted"
+                    android:textSize="14sp" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="@string/volume_hint"
+            android:textColor="@color/muted" />
 
         <Button
-            android:id="@+id/denied_battery_button"
+            android:id="@+id/battery_button"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
@@ -260,6 +349,74 @@
             android:textColor="@color/button_text"
             android:textSize="16sp"
             android:visibility="gone" />
+
+        <Button
+            android:id="@+id/logout_button"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:backgroundTint="@color/primary"
+            android:minHeight="52dp"
+            android:text="@string/logout"
+            android:textAllCaps="false"
+            android:textColor="@color/button_text"
+            android:textSize="18sp" />
+
+        <Button
+            android:id="@+id/settings_back"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:minHeight="52dp"
+            android:text="@string/back"
+            android:textAllCaps="false"
+            android:textSize="18sp" />
+        </LinearLayout>
+    </ScrollView>
+
+    <LinearLayout
+        android:id="@+id/screen_denied"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:padding="24dp"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="end|center_vertical"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/denied_settings"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/settings"
+                android:padding="12dp"
+                android:scaleType="centerInside"
+                android:src="@drawable/ic_settings" />
+
+            <ImageButton
+                android:id="@+id/denied_end_shift"
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/end_shift"
+                android:padding="12dp"
+                android:scaleType="centerInside"
+                android:src="@drawable/ic_end_shift" />
+        </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="@string/denied"
+            android:textColor="@color/text"
+            android:textSize="20sp" />
     </LinearLayout>
 
 </FrameLayout>

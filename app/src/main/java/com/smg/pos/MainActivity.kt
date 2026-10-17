@@ -11,7 +11,11 @@ import android.provider.Settings
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.widget.Button
+import android.widget.RadioGroup
+import android.widget.SeekBar
 import android.widget.TextView
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.SwitchCompat
@@ -22,11 +26,12 @@ import androidx.recyclerview.widget.RecyclerView
 import kotlin.concurrent.thread
 
 class MainActivity : AppCompatActivity(), ShiftState.Listener {
-    private enum class Screen { LOGIN, SHIFT_OFF, CALLS, DENIED }
+    private enum class Screen { LOGIN, SHIFT_OFF, CALLS, SETTINGS, DENIED }
 
     private lateinit var loginScreen: View
     private lateinit var shiftOffScreen: View
     private lateinit var callsScreen: View
+    private lateinit var settingsScreen: View
     private lateinit var deniedScreen: View
     private lateinit var emailInput: android.widget.EditText
     private lateinit var passwordInput: android.widget.EditText
@@ -37,9 +42,13 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
     private lateinit var callsOffline: TextView
     private lateinit var callsNotifications: TextView
     private lateinit var batteryButton: Button
-    private lateinit var deniedBatteryButton: Button
     private lateinit var soundSwitch: SwitchCompat
     private lateinit var vibrationSwitch: SwitchCompat
+    private lateinit var durationLabel: TextView
+    private lateinit var durationSeek: SeekBar
+    private lateinit var strengthBlock: View
+    private lateinit var strengthSeek: SeekBar
+    private lateinit var themeGroup: RadioGroup
     private lateinit var startShiftSwitch: SwitchCompat
     private val callsAdapter = CallsAdapter()
 
@@ -67,6 +76,11 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
             ShiftState.showShiftOff()
             ShiftService.stop(this)
         }
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (screen == Screen.SETTINGS) closeSettings() else finish()
+            }
+        })
         render()
     }
 
@@ -105,6 +119,7 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
         loginScreen = findViewById(R.id.screen_login)
         shiftOffScreen = findViewById(R.id.screen_shift_off)
         callsScreen = findViewById(R.id.screen_calls)
+        settingsScreen = findViewById(R.id.screen_settings)
         deniedScreen = findViewById(R.id.screen_denied)
         emailInput = findViewById(R.id.email)
         passwordInput = findViewById(R.id.password)
@@ -115,9 +130,13 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
         callsOffline = findViewById(R.id.calls_offline)
         callsNotifications = findViewById(R.id.calls_notifications)
         batteryButton = findViewById(R.id.battery_button)
-        deniedBatteryButton = findViewById(R.id.denied_battery_button)
         soundSwitch = findViewById(R.id.sound_switch)
         vibrationSwitch = findViewById(R.id.vibration_switch)
+        durationLabel = findViewById(R.id.vibration_duration_label)
+        durationSeek = findViewById(R.id.vibration_duration)
+        strengthBlock = findViewById(R.id.vibration_strength_block)
+        strengthSeek = findViewById(R.id.vibration_strength)
+        themeGroup = findViewById(R.id.theme_group)
         startShiftSwitch = findViewById(R.id.start_shift_switch)
 
         callsList.layoutManager = LinearLayoutManager(this)
@@ -133,10 +152,13 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
                 false
             }
         }
+        findViewById<View>(R.id.settings_button).setOnClickListener { openSettings() }
+        findViewById<View>(R.id.denied_settings).setOnClickListener { openSettings() }
         findViewById<View>(R.id.end_shift_button).setOnClickListener { confirmEndShift() }
         findViewById<View>(R.id.denied_end_shift).setOnClickListener { confirmEndShift() }
+        findViewById<View>(R.id.settings_back).setOnClickListener { closeSettings() }
+        findViewById<View>(R.id.logout_button).setOnClickListener { logout() }
         batteryButton.setOnClickListener { requestBatteryExemption() }
-        deniedBatteryButton.setOnClickListener { requestBatteryExemption() }
         startShiftSwitch.setOnCheckedChangeListener { _, checked ->
             if (!ignoreSwitch && checked) startShift()
         }
@@ -145,6 +167,39 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
         }
         vibrationSwitch.setOnCheckedChangeListener { _, checked ->
             if (!ignoreSwitch) SessionStore.setVibrationEnabled(checked)
+        }
+        durationSeek.max = SessionStore.VIBRATION_MS_MAX - SessionStore.VIBRATION_MS_MIN
+        strengthSeek.max = SessionStore.VIBRATION_AMPLITUDE_MAX - SessionStore.VIBRATION_AMPLITUDE_MIN
+        durationSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                val ms = SessionStore.VIBRATION_MS_MIN + progress
+                durationLabel.text = durationText(ms)
+                if (fromUser) SessionStore.setVibrationDurationMs(ms)
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+            override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+        })
+        strengthSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) SessionStore.setVibrationAmplitude(SessionStore.VIBRATION_AMPLITUDE_MIN + progress)
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) = Unit
+
+            override fun onStopTrackingTouch(seekBar: SeekBar?) = Unit
+        })
+        themeGroup.setOnCheckedChangeListener { _, checkedId ->
+            if (ignoreSwitch) return@setOnCheckedChangeListener
+            val theme = when (checkedId) {
+                R.id.theme_dark -> SessionStore.THEME_DARK
+                R.id.theme_light -> SessionStore.THEME_LIGHT
+                else -> SessionStore.THEME_SYSTEM
+            }
+            if (theme == SessionStore.theme()) return@setOnCheckedChangeListener
+            SessionStore.setTheme(theme)
+            AppCompatDelegate.setDefaultNightMode(SessionStore.nightMode())
         }
     }
 
@@ -248,6 +303,31 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
         render()
     }
 
+    private fun openSettings() {
+        screen = Screen.SETTINGS
+        render()
+    }
+
+    private fun closeSettings() {
+        screen = if (ShiftState.phase == ShiftState.Phase.DENIED && SessionStore.isShiftOn()) {
+            Screen.DENIED
+        } else {
+            Screen.CALLS
+        }
+        render()
+    }
+
+    private fun logout() {
+        endConfirm?.dismiss()
+        SignalPlayer.stop()
+        SessionStore.clearSession()
+        ShiftState.showLogin(null)
+        ShiftService.stop(this)
+        screen = Screen.LOGIN
+        loginErrorText = null
+        render()
+    }
+
     private fun batteryRestricted(): Boolean {
         val power = getSystemService(PowerManager::class.java) ?: return false
         return !power.isIgnoringBatteryOptimizations(packageName)
@@ -277,7 +357,7 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
         val shiftOn = SessionStore.isShiftOn()
         when {
             !loggedIn || phase == ShiftState.Phase.LOGIN -> screen = Screen.LOGIN
-            phase == ShiftState.Phase.DENIED && shiftOn -> screen = Screen.DENIED
+            phase == ShiftState.Phase.DENIED && shiftOn && screen != Screen.SETTINGS -> screen = Screen.DENIED
             !shiftOn -> screen = Screen.SHIFT_OFF
             screen == Screen.DENIED || screen == Screen.SHIFT_OFF || screen == Screen.LOGIN ->
                 screen = Screen.CALLS
@@ -285,6 +365,7 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
         loginScreen.isVisible = screen == Screen.LOGIN
         shiftOffScreen.isVisible = screen == Screen.SHIFT_OFF
         callsScreen.isVisible = screen == Screen.CALLS
+        settingsScreen.isVisible = screen == Screen.SETTINGS
         deniedScreen.isVisible = screen == Screen.DENIED
 
         val message = loginErrorText ?: if (phase == ShiftState.Phase.LOGIN) ShiftState.loginMessage else null
@@ -311,15 +392,31 @@ class MainActivity : AppCompatActivity(), ShiftState.Listener {
 
         val notificationsOff = !NotificationManagerCompat.from(this).areNotificationsEnabled()
         callsNotifications.isVisible = screen == Screen.CALLS && notificationsOff
-        val batteryRestricted = batteryRestricted()
-        batteryButton.isVisible = screen == Screen.CALLS && batteryRestricted
-        deniedBatteryButton.isVisible = screen == Screen.DENIED && batteryRestricted
+        batteryButton.isVisible = screen == Screen.SETTINGS && batteryRestricted()
 
         ignoreSwitch = true
         soundSwitch.isChecked = SessionStore.soundEnabled()
         vibrationSwitch.isChecked = SessionStore.vibrationEnabled()
         startShiftSwitch.isChecked = false
+        val durationProgress = SessionStore.vibrationDurationMs() - SessionStore.VIBRATION_MS_MIN
+        if (durationSeek.progress != durationProgress) durationSeek.progress = durationProgress
+        durationLabel.text = durationText(SessionStore.vibrationDurationMs())
+        val strengthProgress = SessionStore.vibrationAmplitude() - SessionStore.VIBRATION_AMPLITUDE_MIN
+        if (strengthSeek.progress != strengthProgress) strengthSeek.progress = strengthProgress
+        strengthBlock.isVisible = SignalPlayer.supportsAmplitude(this)
+        themeGroup.check(
+            when (SessionStore.theme()) {
+                SessionStore.THEME_DARK -> R.id.theme_dark
+                SessionStore.THEME_LIGHT -> R.id.theme_light
+                else -> R.id.theme_system
+            },
+        )
         ignoreSwitch = false
+    }
+
+    private fun durationText(ms: Int): String {
+        val tenths = (ms + 50) / 100
+        return getString(R.string.vibration_duration, tenths / 10, tenths % 10)
     }
 
     companion object {

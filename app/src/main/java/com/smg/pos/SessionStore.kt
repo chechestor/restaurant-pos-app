@@ -2,6 +2,7 @@ package com.smg.pos
 
 import android.content.Context
 import android.util.Base64
+import androidx.appcompat.app.AppCompatDelegate
 import org.json.JSONObject
 
 object SessionStore {
@@ -12,7 +13,20 @@ object SessionStore {
     private const val KEY_BASELINE = "baseline_done"
     private const val KEY_SOUND = "sound_enabled"
     private const val KEY_VIBRATION = "vibration_enabled"
+    private const val KEY_VIBRATION_MS = "vibration_ms"
+    private const val KEY_VIBRATION_AMPLITUDE = "vibration_amplitude"
     private const val KEY_SHIFT = "shift_on"
+    private const val KEY_THEME = "theme"
+
+    const val THEME_SYSTEM = "system"
+    const val THEME_LIGHT = "light"
+    const val THEME_DARK = "dark"
+
+    const val VIBRATION_MS_MIN = 200
+    const val VIBRATION_MS_MAX = 3000
+    const val VIBRATION_MS_DEFAULT = 1000
+    const val VIBRATION_AMPLITUDE_MIN = 1
+    const val VIBRATION_AMPLITUDE_MAX = 255
 
     @Volatile
     var epoch: Long = 0L
@@ -115,6 +129,47 @@ object SessionStore {
 
     fun setVibrationEnabled(enabled: Boolean) {
         prefs.edit().putBoolean(KEY_VIBRATION, enabled).commit()
+    }
+
+    fun vibrationDurationMs(): Int {
+        return prefs.getInt(KEY_VIBRATION_MS, VIBRATION_MS_DEFAULT).coerceIn(VIBRATION_MS_MIN, VIBRATION_MS_MAX)
+    }
+
+    fun setVibrationDurationMs(ms: Int) {
+        prefs.edit().putInt(KEY_VIBRATION_MS, ms.coerceIn(VIBRATION_MS_MIN, VIBRATION_MS_MAX)).commit()
+    }
+
+    fun vibrationAmplitude(): Int {
+        return prefs.getInt(KEY_VIBRATION_AMPLITUDE, VIBRATION_AMPLITUDE_MAX)
+            .coerceIn(VIBRATION_AMPLITUDE_MIN, VIBRATION_AMPLITUDE_MAX)
+    }
+
+    fun setVibrationAmplitude(amplitude: Int) {
+        prefs.edit()
+            .putInt(KEY_VIBRATION_AMPLITUDE, amplitude.coerceIn(VIBRATION_AMPLITUDE_MIN, VIBRATION_AMPLITUDE_MAX))
+            .commit()
+    }
+
+    fun theme(): String {
+        return when (prefs.getString(KEY_THEME, THEME_SYSTEM)) {
+            THEME_LIGHT -> THEME_LIGHT
+            THEME_DARK -> THEME_DARK
+            else -> THEME_SYSTEM
+        }
+    }
+
+    fun setTheme(theme: String) {
+        val value = when (theme) {
+            THEME_LIGHT, THEME_DARK -> theme
+            else -> THEME_SYSTEM
+        }
+        prefs.edit().putString(KEY_THEME, value).commit()
+    }
+
+    fun nightMode(): Int = when (theme()) {
+        THEME_DARK -> AppCompatDelegate.MODE_NIGHT_YES
+        THEME_LIGHT -> AppCompatDelegate.MODE_NIGHT_NO
+        else -> AppCompatDelegate.MODE_NIGHT_FOLLOW_SYSTEM
     }
 
     fun clearSession() {

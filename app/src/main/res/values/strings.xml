@@ -12,7 +12,7 @@
     <string name="session_expired">Сессия истекла. Войдите снова.</string>
     <string name="calls_title">Вызовы</string>
     <string name="settings">Настройки</string>
-    <string name="logout">Выйти</string>
+    <string name="logout">Выйти из аккаунта</string>
     <string name="start_shift">Начать смену</string>
     <string name="end_shift_confirm">Действительно ли вы хотите закончить смену?</string>
     <string name="end_shift">Закончить смену</string>
@@ -26,6 +26,14 @@
     <string name="battery_unrestricted">Разрешить работу без ограничения батареи</string>
     <string name="sound">Звук</string>
     <string name="vibration">Вибрация</string>
+    <string name="vibration_duration">Длительность: %1$d,%2$d с</string>
+    <string name="vibration_strength">Сила</string>
+    <string name="vibration_weak">Слабая</string>
+    <string name="vibration_max">Максимальная</string>
+    <string name="theme">Тема</string>
+    <string name="theme_dark">Тёмная</string>
+    <string name="theme_light">Светлая</string>
+    <string name="theme_system">Системная</string>
     <string name="volume_hint">Громкость берётся из системных уведомлений.</string>
     <string name="denied">Нет права просматривать вызовы официанта.</string>
     <string name="shift_running">Смена идёт</string>
