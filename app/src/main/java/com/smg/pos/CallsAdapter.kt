@@ -1,14 +1,18 @@
 package com.smg.pos
 
+import android.content.Context
 import android.content.res.ColorStateList
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.widget.Button
 import android.widget.TextView
 import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.LinearSmoothScroller
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.chip.Chip
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -24,6 +28,7 @@ class CallsAdapter : RecyclerView.Adapter<CallsAdapter.Holder>() {
     private var showRestaurant = false
     private var errors: Map<Int, String> = emptyMap()
     private var pending: Set<Int> = emptySet()
+    private var callsList: RecyclerView? = null
 
     var onStatusSelected: ((callId: Int, status: String) -> Unit)? = null
 
@@ -63,13 +68,23 @@ class CallsAdapter : RecyclerView.Adapter<CallsAdapter.Holder>() {
             notifyDataSetChanged()
             return
         }
+        val topVisible = isTopVisible()
         DiffUtil.calculateDiff(CallDiff(previous, items.toList())).dispatchUpdatesTo(this)
+        if (topVisible) revealLeadingNew(previous)
         if (!metaChanged) return
         for (index in items.indices) {
             val current = items[index]
             val prior = previous.find { it.id == current.id } ?: continue
             if (prior == current) notifyItemChanged(index)
         }
+    }
+
+    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
+        callsList = recyclerView
+    }
+
+    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        if (callsList === recyclerView) callsList = null
     }
 
     override fun getItemId(position: Int): Long = items[position].id.toLong()
@@ -144,6 +159,52 @@ class CallsAdapter : RecyclerView.Adapter<CallsAdapter.Holder>() {
         chip.setTextColor(ContextCompat.getColor(chip.context, foreground))
     }
 
+    private fun isTopVisible(): Boolean {
+        val recycler = callsList ?: return false
+        val layoutManager = recycler.layoutManager as? LinearLayoutManager ?: return false
+        if (recycler.childCount == 0) return true
+        val first = layoutManager.findViewByPosition(0) ?: return false
+        return first.top >= recycler.paddingTop
+    }
+
+    private fun revealLeadingNew(previous: List<WaiterCall>) {
+        val recycler = callsList ?: return
+        if (recycler.scrollState == RecyclerView.SCROLL_STATE_DRAGGING) return
+        val newest = items.firstOrNull() ?: return
+        if (previous.any { it.id == newest.id }) return
+        val observer = recycler.viewTreeObserver
+        observer.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                if (observer.isAlive) observer.removeOnPreDrawListener(this)
+                else recycler.viewTreeObserver.removeOnPreDrawListener(this)
+                bringNewRowsIntoView(recycler)
+                return true
+            }
+        })
+    }
+
+    private fun bringNewRowsIntoView(recycler: RecyclerView) {
+        if (recycler.scrollState == RecyclerView.SCROLL_STATE_DRAGGING) return
+        val layoutManager = recycler.layoutManager as? LinearLayoutManager ?: return
+        val first = layoutManager.findViewByPosition(0)
+        if (first == null) {
+            layoutManager.startSmoothScroll(RevealScroller(recycler.context))
+            return
+        }
+        val dy = first.top - recycler.paddingTop
+        if (dy < 0) recycler.smoothScrollBy(0, dy, null, ARRIVAL_MS)
+    }
+
+    private class RevealScroller(context: Context) : LinearSmoothScroller(context) {
+        init {
+            targetPosition = 0
+        }
+
+        override fun getVerticalSnapPreference(): Int = SNAP_TO_START
+
+        override fun calculateTimeForDeceleration(dx: Int): Int = ARRIVAL_MS
+    }
+
     private class CallDiff(
         private val old: List<WaiterCall>,
         private val new: List<WaiterCall>,
@@ -159,5 +220,9 @@ class CallsAdapter : RecyclerView.Adapter<CallsAdapter.Holder>() {
         override fun areContentsTheSame(oldPosition: Int, newPosition: Int): Boolean {
             return old[oldPosition] == new[newPosition]
         }
+    }
+
+    private companion object {
+        const val ARRIVAL_MS = 330
     }
 }
