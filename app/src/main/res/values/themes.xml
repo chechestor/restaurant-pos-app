@@ -1,9 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.SmgPos" parent="Theme.AppCompat.Light.NoActionBar">
+    <style name="Theme.SmgPos" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="colorPrimary">@color/primary</item>
-        <item name="colorAccent">@color/primary</item>
-        <item name="android:statusBarColor">#0D47A1</item>
-        <item name="android:windowBackground">#F4F6F8</item>
+        <item name="colorOnPrimary">@color/button_text</item>
+        <item name="colorSurface">@color/card</item>
+        <item name="colorOnSurface">@color/text</item>
+        <item name="colorOnSurfaceVariant">@color/muted</item>
+        <item name="colorError">@color/error</item>
+        <item name="colorOutline">@color/field_stroke</item>
+        <item name="android:colorBackground">@color/window</item>
+        <item name="android:statusBarColor">@color/status_bar</item>
+        <item name="android:navigationBarColor">@color/window</item>
+        <item name="android:windowBackground">@color/window</item>
+        <item name="android:textColorPrimary">@color/text</item>
+        <item name="android:textColorSecondary">@color/muted</item>
+        <item name="shapeAppearanceSmallComponent">@style/Shape.Smg</item>
+        <item name="shapeAppearanceMediumComponent">@style/Shape.Smg</item>
+        <item name="shapeAppearanceLargeComponent">@style/Shape.Smg</item>
+        <item name="materialAlertDialogTheme">@style/ThemeOverlay.Material3.MaterialAlertDialog</item>
     </style>
+
+    <style name="Shape.Smg" parent="ShapeAppearance.Material3.Corner.Medium">
+        <item name="cornerSize">12dp</item>
+    </style>
+
+    <style name="TextAppearance.Smg.ScreenTitle" parent="TextAppearance.Material3.HeadlineSmall" />
 </resources>

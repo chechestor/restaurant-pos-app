@@ -1,13 +1,21 @@
 package com.smg.pos
 
+import android.content.Context
+import android.content.res.ColorStateList
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewTreeObserver
 import android.widget.Button
 import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
 import androidx.core.view.isVisible
+import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.LinearSmoothScroller
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.chip.Chip
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.util.Locale
@@ -20,8 +28,13 @@ class CallsAdapter : RecyclerView.Adapter<CallsAdapter.Holder>() {
     private var showRestaurant = false
     private var errors: Map<Int, String> = emptyMap()
     private var pending: Set<Int> = emptySet()
+    private var callsList: RecyclerView? = null
 
     var onStatusSelected: ((callId: Int, status: String) -> Unit)? = null
+
+    init {
+        setHasStableIds(true)
+    }
 
     fun submit(
         calls: List<WaiterCall>,
@@ -29,6 +42,7 @@ class CallsAdapter : RecyclerView.Adapter<CallsAdapter.Holder>() {
         showRestaurant: Boolean,
         errors: Map<Int, String>,
         pending: Set<Int>,
+        animate: Boolean,
     ) {
         if (
             items == calls &&
@@ -39,14 +53,41 @@ class CallsAdapter : RecyclerView.Adapter<CallsAdapter.Holder>() {
         ) {
             return
         }
+        val previous = items.toList()
+        val metaChanged = this.canManage != canManage ||
+            this.showRestaurant != showRestaurant ||
+            this.errors != errors ||
+            this.pending != pending
         items.clear()
         items.addAll(calls)
         this.canManage = canManage
         this.showRestaurant = showRestaurant
         this.errors = errors
         this.pending = pending
-        notifyDataSetChanged()
+        if (!animate) {
+            notifyDataSetChanged()
+            return
+        }
+        val topVisible = isTopVisible()
+        DiffUtil.calculateDiff(CallDiff(previous, items.toList())).dispatchUpdatesTo(this)
+        if (topVisible) revealLeadingNew(previous)
+        if (!metaChanged) return
+        for (index in items.indices) {
+            val current = items[index]
+            val prior = previous.find { it.id == current.id } ?: continue
+            if (prior == current) notifyItemChanged(index)
+        }
     }
+
+    override fun onAttachedToRecyclerView(recyclerView: RecyclerView) {
+        callsList = recyclerView
+    }
+
+    override fun onDetachedFromRecyclerView(recyclerView: RecyclerView) {
+        if (callsList === recyclerView) callsList = null
+    }
+
+    override fun getItemId(position: Int): Long = items[position].id.toLong()
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): Holder {
         val view = LayoutInflater.from(parent.context).inflate(R.layout.item_call, parent, false)
@@ -63,7 +104,7 @@ class CallsAdapter : RecyclerView.Adapter<CallsAdapter.Holder>() {
         holder.restaurant.isVisible = showRestaurant
         holder.restaurant.text = holder.itemView.context.getString(R.string.field_restaurant, restaurant)
         holder.reason.text = holder.itemView.context.getString(R.string.field_reason, reasonLabel(call.reason))
-        holder.status.text = holder.itemView.context.getString(R.string.field_status, statusLabel(call.status))
+        paintStatus(holder.status, call.status)
         val created = call.createdAt?.atZone(ZoneId.systemDefault())?.let { timeFormat.format(it) } ?: "—"
         holder.created.text = holder.itemView.context.getString(R.string.field_created, created)
 
@@ -86,7 +127,7 @@ class CallsAdapter : RecyclerView.Adapter<CallsAdapter.Holder>() {
         val call = items[position]
         if (call.id in pending) return
         val labels = statusCodes.map { statusLabel(it) }.toTypedArray()
-        AlertDialog.Builder(holder.itemView.context)
+        MaterialAlertDialogBuilder(holder.itemView.context)
             .setTitle(R.string.change_status)
             .setItems(labels) { _, which ->
                 val chosen = statusCodes[which]
@@ -100,9 +141,88 @@ class CallsAdapter : RecyclerView.Adapter<CallsAdapter.Holder>() {
         val table: TextView = view.findViewById(R.id.call_table)
         val restaurant: TextView = view.findViewById(R.id.call_restaurant)
         val reason: TextView = view.findViewById(R.id.call_reason)
-        val status: TextView = view.findViewById(R.id.call_status)
+        val status: Chip = view.findViewById(R.id.call_status)
         val created: TextView = view.findViewById(R.id.call_created)
         val change: Button = view.findViewById(R.id.call_status_change)
         val error: TextView = view.findViewById(R.id.call_status_error)
+    }
+
+    private fun paintStatus(chip: Chip, status: String) {
+        val (background, foreground) = when (status) {
+            "new" -> R.color.status_new_bg to R.color.status_new_text
+            "in_progress" -> R.color.status_progress_bg to R.color.status_progress_text
+            "done" -> R.color.status_done_bg to R.color.status_done_text
+            else -> R.color.status_cancelled_bg to R.color.status_cancelled_text
+        }
+        chip.text = statusLabel(status)
+        chip.chipBackgroundColor = ColorStateList.valueOf(ContextCompat.getColor(chip.context, background))
+        chip.setTextColor(ContextCompat.getColor(chip.context, foreground))
+    }
+
+    private fun isTopVisible(): Boolean {
+        val recycler = callsList ?: return false
+        val layoutManager = recycler.layoutManager as? LinearLayoutManager ?: return false
+        if (recycler.childCount == 0) return true
+        val first = layoutManager.findViewByPosition(0) ?: return false
+        return first.top >= recycler.paddingTop
+    }
+
+    private fun revealLeadingNew(previous: List<WaiterCall>) {
+        val recycler = callsList ?: return
+        if (recycler.scrollState == RecyclerView.SCROLL_STATE_DRAGGING) return
+        val newest = items.firstOrNull() ?: return
+        if (previous.any { it.id == newest.id }) return
+        val observer = recycler.viewTreeObserver
+        observer.addOnPreDrawListener(object : ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                if (observer.isAlive) observer.removeOnPreDrawListener(this)
+                else recycler.viewTreeObserver.removeOnPreDrawListener(this)
+                bringNewRowsIntoView(recycler)
+                return true
+            }
+        })
+    }
+
+    private fun bringNewRowsIntoView(recycler: RecyclerView) {
+        if (recycler.scrollState == RecyclerView.SCROLL_STATE_DRAGGING) return
+        val layoutManager = recycler.layoutManager as? LinearLayoutManager ?: return
+        val first = layoutManager.findViewByPosition(0)
+        if (first == null) {
+            layoutManager.startSmoothScroll(RevealScroller(recycler.context))
+            return
+        }
+        val dy = first.top - recycler.paddingTop
+        if (dy < 0) recycler.smoothScrollBy(0, dy, null, ARRIVAL_MS)
+    }
+
+    private class RevealScroller(context: Context) : LinearSmoothScroller(context) {
+        init {
+            targetPosition = 0
+        }
+
+        override fun getVerticalSnapPreference(): Int = SNAP_TO_START
+
+        override fun calculateTimeForDeceleration(dx: Int): Int = ARRIVAL_MS
+    }
+
+    private class CallDiff(
+        private val old: List<WaiterCall>,
+        private val new: List<WaiterCall>,
+    ) : DiffUtil.Callback() {
+        override fun getOldListSize(): Int = old.size
+
+        override fun getNewListSize(): Int = new.size
+
+        override fun areItemsTheSame(oldPosition: Int, newPosition: Int): Boolean {
+            return old[oldPosition].id == new[newPosition].id
+        }
+
+        override fun areContentsTheSame(oldPosition: Int, newPosition: Int): Boolean {
+            return old[oldPosition] == new[newPosition]
+        }
+    }
+
+    private companion object {
+        const val ARRIVAL_MS = 330
     }
 }

@@ -8,4 +8,15 @@
     <color name="card">#FFFFFF</color>
     <color name="field">#FFFFFF</color>
     <color name="warning">#FFF4E5</color>
+    <color name="window">#F4F6F8</color>
+    <color name="status_bar">#0D47A1</color>
+    <color name="field_stroke">#D5DBE3</color>
+    <color name="status_new_bg">#E65100</color>
+    <color name="status_new_text">#FFFFFF</color>
+    <color name="status_progress_bg">#1565C0</color>
+    <color name="status_progress_text">#FFFFFF</color>
+    <color name="status_done_bg">#2E7D32</color>
+    <color name="status_done_text">#FFFFFF</color>
+    <color name="status_cancelled_bg">#E6E9ED</color>
+    <color name="status_cancelled_text">#3E4750</color>
 </resources>
